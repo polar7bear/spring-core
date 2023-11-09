@@ -81,6 +81,73 @@ MemberRepository 인터페이스에게 상속받은 JdbcMemberRepository, JpaMem
 
 
 
+---
+
+
+
+
+# OCP, DIP 원칙 위반을 벗어나는 설계법
+
+객체 지향 설계의 5가지 원칙중 OCP (개방-폐쇄 원칙)와 DIP (의존관계 역전 원칙)을 위반하는 설계법을 극복하는 방법을 알아보자.
+
+먼저 OCP는 확장에는 열려 있어야 하고, 변경에는 닫혀있어야 한다.
+
+DIP는 구현체에 의존해서는 안되고, 추상체에만 의존을 해야 한다.
+
+코드로 살펴보자.
+
+```java
+public class OrderServiceImpl implements OrderService {
+
+    private final MemberRepository memberRepository = new MemoryMemberRepository();
+    //private final DiscountPolicy discountPolicy = new FixDiscountPolicy();
+    private final DiscountPolicy discountPolicy = new RateDiscountPolicy();
+
+    @Override
+    public Order createOrder(Long memberId, String itemName, int itemPrice) {
+        Member member = memberRepository.findById(memberId);
+        int discountPrice = discountPolicy.discount(member, itemPrice);
+
+        return new Order(memberId, itemName, itemPrice, discountPrice);
+    }
+}
+```
+
+순서도로 알아보자면
+
+1. 고정된 금액으로 할인 받는 기능을 사용하기 위해 DiscountPolicy 인터페이스의 new 키워드를 통해 구현 클래스(FixDiscountPolicy)를 생성했다.(주석 부분) ← 추상체에만 의존을 해야 하는데, 구현체가 같이 있다. 이는 **DIP 위반**이다.
+  1. 참고로 주석 처리 한 이유는 OCP 원칙 위반의 사례를 보여주기 위해 다른 구현 클래스로 변경 하면서 주석 처리 했음.
+2. 고정된 금액으로 할인 받는 정책에서 → 고정된 퍼센트 ex)10% 로 할인 받는 정책으로 변경 하기 위해 위의 FixDiscountPolicy를 주석 처리를 하여금 지우고 밑에줄에 new RateDiscountPolicy를 추가 해주었다. → OCP 원칙은 변경에는 닫혀있어야 한다고 했다. → 이는 **OCP 위반**이다.
+
+그럼 도대체 OCP와 DIP를 위반하지 않고 **추상체에만 의존**하면서, 또 **클라이언트 코드를 변경 하지 않고** 다른 기능을 쓰려면 어떻게 해야 할까?
+
+```java
+public class OrderServiceImpl implements OrderService {
+
+    private final MemberRepository memberRepository = new MemoryMemberRepository();
+    //private final DiscountPolicy discountPolicy = new FixDiscountPolicy();
+    //private final DiscountPolicy discountPolicy = new RateDiscountPolicy();
+		private DiscountPolicy discountPolicy; // 인터페이스에만 의존
+
+    @Override
+    public Order createOrder(Long memberId, String itemName, int itemPrice) {
+        Member member = memberRepository.findById(memberId);
+        int discountPrice = discountPolicy.discount(member, itemPrice);
+
+        return new Order(memberId, itemName, itemPrice, discountPrice);
+    }
+}
+```
+
+위와 같이 모두 지우고 인터페이스만 의존한다.
+
+→ 근데 이렇게 하면 구현체가 없는데 어떻게 코드를 실행할 수 있을까? (저 상태로 실행하면 당연스럽게도 NPE가 발생함)
+
+**해결 방안**
+
+이 문제를 해결하려면 누군가가 클라이언트인 OrderServiceImpl에 DiscountPolicy의 구현 객체를 대신 생성하고 주입 해주어야 한다.
+
+
 
 
 
