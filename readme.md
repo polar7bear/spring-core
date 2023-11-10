@@ -94,7 +94,7 @@ MemberRepository 인터페이스에게 상속받은 JdbcMemberRepository, JpaMem
 
 DIP는 구현체에 의존해서는 안되고, 추상체에만 의존을 해야 한다.
 
-코드로 살펴보자.
+이를 스프링 프레임워크를 사용 하지 않은 순수 자바 코드로 살펴보자.
 
 ```java
 public class OrderServiceImpl implements OrderService {
@@ -149,9 +149,77 @@ public class OrderServiceImpl implements OrderService {
 
 
 
+```java
+public class MemberServiceImpl implements MemberService {
 
+    private final MemberRepository memberRepository;
 
+    public MemberServiceImpl(MemberRepository memberRepository) {
+        this.memberRepository = memberRepository;
+    }
 
+    @Override
+    public void join(Member member) {
+        memberRepository.save(member);
+    }
+
+    @Override
+    public Member findMember(Long memberId) {
+        return memberRepository.findById(memberId);
+    }
+}
+```
+```java
+public class OrderServiceImpl implements OrderService {
+
+    private final MemberRepository memberRepository;
+    private final DiscountPolicy discountPolicy;
+
+    public OrderServiceImpl(MemberRepository memberRepository, DiscountPolicy discountPolicy) { // 2번
+        this.memberRepository = memberRepository;
+        this.discountPolicy = discountPolicy;
+    }
+
+    @Override
+    public Order createOrder(Long memberId, String itemName, int itemPrice) {
+        Member member = memberRepository.findById(memberId);
+        int discountPrice = discountPolicy.discount(member, itemPrice);
+
+        return new Order(memberId, itemName, itemPrice, discountPrice);
+    }
+}
+```
+
+MemberServiceImpl에서 DIP 원칙 위반을 벗어나기 위해 new 키워드를 통한 구현체 인스턴스 생성을 없애고 인터페이스에만 의존하고 있다.  
+-> 이제 구현체를 어디서 생성하느냐 인데, 이는 프로젝트의 전체 설정을 하는 Config 클래스를 만들고 그 안에서 한다. (애플리케이션 실제 동작에 필요한 **구현 객체를 생성**한다)  
+  
+아래와 같이 Config 클래스를 설정하기 전에 구현 클래스에서 먼저 위의 코드와 같이 생성자를 만들어 주어야 한다.  
+그리고 OrderServiceImpl은 MemberRepository와 DiscountRepository 두개를 사용하기 때문에 2개의 구현 클래스를 리턴한다.
+
+```java
+public class AppConfig {
+
+    public MemberService memberService() {
+        return new MemberServiceImpl(new MemoryMemberRepository()); 
+    }
+
+    public OrderService orderService() {
+        return new OrderServiceImpl(new MemoryMemberRepository(), new FixDiscountPolicy()); // 1번
+    }
+
+}
+```
+
+AppConfig는 생성한 객체 인스턴스의 참조(레퍼런스)를 생성자를 통해서 주입 해준다.  
+-> 이게 무슨 말인가 하면, OrderServiceImpl을 예로 들어보면 위의 AppConfig에서 1번에 new 키워드를 통해 두개의 객체를 생성 한다.  
+-> 그리고 AppConfig의 orderService()를 통해 생성된 객체가 OrderServiceImpl의 2번에서  생성자의 인자값에 들어가는 것이다.
+이렇게 생성자를 통해서 주입을 하기 때문에, **생성자 주입**이라고 한다.  
+위와 같이 생성자 주입을 통해서 객체를 만들기 때문에 인터페이스에만 의존하게 되어 DIP 원칙을 지킬 수 있다.  
+  
+### 정리
+- MemberServiceImpl 입장에서 생성자를 통해 어떤 구현 객체가 주입될지는 알 수 없다.
+- MemberServiceImpl 의 생성자를 통해서 어떤 구현 객체를 주입할지는 오직 외부(AppConfing)에서 결정된다.
+- MemberServiceImpl 은 이제부터 **의존관계에 대한 고민은 외부**에 맡기고 **실행에만 집중**하면 된다. 
 
 
 
